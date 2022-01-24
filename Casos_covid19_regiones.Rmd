@@ -1,0 +1,109 @@
+---
+title: "Prueba_Bar_char_race"
+output: html_document
+---
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+### Configuracion
+```{r setup}
+writeLines('PATH="${RTOOLS40_HOME}\\usr\\bin;${PATH}"', con = "~/.Renviron")
+
+
+##install.packages("knitr")
+##library(knitr)
+##knitr::opts_chunk$set(echo = TRUE, message = FALSE, comment = NA, warning = FALSE)
+setwd('D:/Trabajo R/BarCharRace')
+getwd()
+```
+
+
+```{r}
+#### Instalar packages
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+# usage
+packages <- c("broom","dbplyr","ggplot2","scales","tidyverse","gganimate","gapminder","gifski") 
+ipak(packages)
+##install.packages("ffmpeg")
+```
+
+```{r}
+library(broom)
+library(dbplyr)
+library(ggplot2)
+library(scales)
+library(tidyverse)
+library(gganimate)
+library(gapminder)
+library(gifski)
+##library(ffmpeg)
+theme_set(theme_classic())
+```
+
+```{r}
+##gdp <- read.csv("https://raw.github.com/datasets/gdp/master/data/gdp.csv")
+gdp2 <- read.csv("D:/Trabajo R/BarCharRace/Datos_hasta_Semana_epi_52_REGIONES_v2.txt")
+
+##dataPot <- subset(dataPotTotal,dataPotTotal$Comuna_Fmt_google=="Providencia" )
+
+words <- scan(
+  text="world income only total dividend asia euro america africa oecd",
+  what= character())
+pattern <- paste0("(",words,")",collapse="|")
+gdp  <- subset(gdp2, !grepl(pattern, comuna_residencia , ignore.case = TRUE))
+colnames(gdp) <- gsub("comuna_residencia", "comuna", colnames(gdp))
+colnames(gdp) <- gsub("region_residencia", "region", colnames(gdp))
+colnames(gdp) <- gsub("semana_epi", "semana_epi", colnames(gdp))
+colnames(gdp) <- gsub("Acumulado", "Acumulado", colnames(gdp))
+
+##gdp$value <- round(gdp$value/1e9)
+
+gap <- gdp %>%
+  group_by(semana_epi) %>%
+  # The * 1 makes it possible to have non-integer ranks while sliding
+  mutate(rank = min_rank(-Acumulado) * 1,
+         Value_rel = Acumulado/Acumulado[rank==1],
+         Value_lbl = paste0(" ",Acumulado)) %>%
+  filter(rank <=10) %>%
+  ungroup()
+
+p <- ggplot(gap, aes(rank, group = comuna, 
+                     fill = as.factor(comuna), color = as.factor(comuna))) +
+  geom_tile(aes(y = Acumulado/2,
+                height = Acumulado,
+                width = 0.9), alpha = 0.8, color = NA) +
+  geom_text(aes(y = 0, label = paste(comuna, " ")), vjust = 0, hjust = 1) +
+  geom_text(aes(y=Acumulado,label = Value_lbl, hjust=0)) +
+  coord_flip(clip = "off", expand = FALSE) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_reverse() +
+  guides(color = FALSE, fill = FALSE) +
+
+  labs(title='10 Comunas con mas casos confirmados Covid 19 (Excluye RM)',
+             subtitle='Semana Epidemiológica: {closest_state}', x = " ", y = "Casos confirmados",
+       caption = "Fuente: DEIS | Plot generado por José L. Toro ") +
+  theme(plot.title = element_text(hjust = 0, size = 22),
+        axis.ticks.y = element_blank(),  # These relate to the axes post-flip
+        axis.text.y  = element_blank(),  # These relate to the axes post-flip
+        plot.margin = margin(1,1,1,4, "cm")) +
+
+  transition_states(semana_epi, transition_length = 8, state_length = 1) +
+  enter_fade() +
+  exit_fade()+
+  ease_aes('cubic-in-out')
+
+animate(p, 100, fps = 20, duration = 90, width = 800, height = 600, renderer = gifski_renderer("Casos_covid19_regiones.gif"))
+```
+
